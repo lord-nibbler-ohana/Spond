@@ -435,6 +435,21 @@ class Spond(_SpondBase):
             return await r.json()
 
     @_SpondBase.require_authentication
+    async def get_profile(self) -> JSONDict:
+        """
+        Retrieve all information connected to the authenticated user's account.
+
+        Returns
+        -------
+        JSONDict
+            Profile details of the authenticated user.
+        """
+        url = f"{self.api_url}profile"
+        async with self.clientsession.get(url, headers=self.auth_headers) as r:
+            self.profile = await r.json()
+            return self.profile
+
+    @_SpondBase.require_authentication
     async def get_upcoming(self) -> list[JSONDict] | None:
         """
         Retrieve upcoming events for the authenticated user.

@@ -253,6 +253,34 @@ class TestReadOnlyMode:
         assert result == {"id": "ID1", "name": "Event One"}
 
 
+class TestProfileMethod:
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_profile__happy_path(self, mock_get, mock_token) -> None:
+        """get_profile returns JSONDict and sets s.profile."""
+        s = Spond(MOCK_USERNAME, MOCK_PASSWORD)
+        s.token = mock_token
+
+        mock_profile_data: JSONDict = {"id": "PROFILE1", "firstName": "Test", "lastName": "User"}
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_profile_data
+        )
+
+        result = await s.get_profile()
+
+        mock_url = "https://api.spond.com/core/v1/profile"
+        mock_get.assert_called_once_with(
+            mock_url,
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+            },
+        )
+        assert result == mock_profile_data
+        assert s.profile == mock_profile_data
+
+
 class TestUpcomingMethod:
     @pytest.mark.asyncio
     @patch("aiohttp.ClientSession.get")
