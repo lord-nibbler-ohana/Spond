@@ -214,7 +214,7 @@ async def main(days: int) -> None:
     finally:
         await s.clientsession.close()
 
-    summaries = [_summarise_event(e) for e in full_events]
+    summaries = [_summarise_event(e) for e in full_events if not e.get("cancelled")]
 
     print_events(summaries, days)
 
