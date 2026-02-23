@@ -42,61 +42,42 @@ def mock_payload() -> JSONDict:
 
 
 class TestEventMethods:
-    @pytest.fixture
-    def mock_events(self) -> list[JSONDict]:
-        """Mock a minimal list of events."""
-        return [
-            {
-                "id": "ID1",
-                "name": "Event One",
-            },
-            {
-                "id": "ID2",
-                "name": "Event Two",
-            },
-        ]
-
     @pytest.mark.asyncio
-    async def test_get_event__happy_path(
-        self, mock_events: list[JSONDict], mock_token
-    ) -> None:
-        """Test that a valid `id` returns the matching event."""
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_event__happy_path(self, mock_get, mock_token) -> None:
+        """Test that a valid uid returns the matching event from the API."""
+        mock_event_data: JSONDict = {"id": "ID1", "name": "Event One"}
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_event_data
+        )
 
         s = Spond(MOCK_USERNAME, MOCK_PASSWORD)
-        s.events = mock_events
         s.token = mock_token
-        g = await s.get_event("ID1")
+        result = await s.get_event("ID1")
 
-        assert g == {
-            "id": "ID1",
-            "name": "Event One",
-        }
+        mock_url = "https://api.spond.com/core/v1/sponds/ID1"
+        mock_get.assert_called_once_with(
+            mock_url,
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+            },
+            params={"includeComments": "false", "addProfileInfo": "false"},
+        )
+        assert result == mock_event_data
 
     @pytest.mark.asyncio
-    async def test_get_event__no_match_raises_exception(
-        self, mock_events: list[JSONDict], mock_token
-    ) -> None:
-        """Test that a non-matched `id` raises KeyError."""
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_event__not_found_raises_key_error(self, mock_get, mock_token) -> None:
+        """Test that a 404 response raises KeyError."""
+        mock_get.return_value.__aenter__.return_value.status = 404
 
         s = Spond(MOCK_USERNAME, MOCK_PASSWORD)
-        s.events = mock_events
         s.token = mock_token
 
         with pytest.raises(KeyError):
-            await s.get_event("ID3")
-
-    @pytest.mark.asyncio
-    async def test_get_event__blank_id_match_raises_exception(
-        self, mock_events: list[JSONDict], mock_token
-    ) -> None:
-        """Test that a blank `id` raises KeyError."""
-
-        s = Spond(MOCK_USERNAME, MOCK_PASSWORD)
-        s.events = mock_events
-        s.token = mock_token
-
-        with pytest.raises(KeyError):
-            await s.get_event("")
+            await s.get_event("MISSING")
 
     @pytest.mark.asyncio
     @patch("aiohttp.ClientSession.put")
@@ -241,16 +222,19 @@ class TestReadOnlyMode:
             await s.send_message(text="hello", chat_id="CHAT1")
 
     @pytest.mark.asyncio
-    async def test_read_only__get_events_allowed(
-        self, mock_token
-    ) -> None:
+    @patch("aiohttp.ClientSession.get")
+    async def test_read_only__get_events_allowed(self, mock_get, mock_token) -> None:
         """Read methods are still allowed on a read-only instance."""
-        mock_events: list[JSONDict] = [{"id": "ID1", "name": "Event One"}]
+        mock_event_data: JSONDict = {"id": "ID1", "name": "Event One"}
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_event_data
+        )
+
         s = Spond(MOCK_USERNAME, MOCK_PASSWORD, read_only=True)
         s.token = mock_token
-        s.events = mock_events
         result = await s.get_event("ID1")
-        assert result == {"id": "ID1", "name": "Event One"}
+        assert result == mock_event_data
 
 
 class TestProfileMethod:

@@ -333,6 +333,7 @@ class Spond(_SpondBase):
             self.events = await r.json()
             return self.events
 
+    @_SpondBase.require_authentication
     async def get_event(self, uid: str) -> JSONDict:
         """
         Get an event by unique ID.
@@ -350,10 +351,16 @@ class Spond(_SpondBase):
 
         Raises
         ------
-        KeyError if no event is matched.
+        KeyError
+            If the API returns a 404 for the given uid.
 
         """
-        return await self._get_entity(self._EVENT, uid)
+        url = f"{self.api_url}sponds/{uid}"
+        params = {"includeComments": "false", "addProfileInfo": "false"}
+        async with self.clientsession.get(url, headers=self.auth_headers, params=params) as r:
+            if r.status == 404:
+                raise KeyError(f"No event with id='{uid}'.")
+            return await r.json()
 
     @_SpondBase.require_authentication
     async def update_event(self, uid: str, updates: JSONDict) -> JSONDict | None:
