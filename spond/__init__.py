@@ -8,3 +8,9 @@ class AuthenticationError(Exception):
     """Error raised on Spond authentication failure."""
 
     pass
+
+
+class ReadOnlyError(Exception):
+    """Error raised when a write operation is attempted on a read-only Spond instance."""
+
+    pass

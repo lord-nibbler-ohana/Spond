@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from spond import ReadOnlyError
 from spond.base import _SpondBase
 from spond.spond import Spond
 
@@ -212,3 +213,72 @@ class TestExportMethod:
             },
         )
         assert data == mock_binary
+
+
+class TestReadOnlyMode:
+    @pytest.mark.asyncio
+    async def test_read_only__update_event_raises(self, mock_token) -> None:
+        """update_event raises ReadOnlyError on a read-only instance."""
+        s = Spond(MOCK_USERNAME, MOCK_PASSWORD, read_only=True)
+        s.token = mock_token
+        with pytest.raises(ReadOnlyError):
+            await s.update_event(uid="ID1", updates={"description": "x"})
+
+    @pytest.mark.asyncio
+    async def test_read_only__change_response_raises(self, mock_token) -> None:
+        """change_response raises ReadOnlyError on a read-only instance."""
+        s = Spond(MOCK_USERNAME, MOCK_PASSWORD, read_only=True)
+        s.token = mock_token
+        with pytest.raises(ReadOnlyError):
+            await s.change_response(uid="ID1", user="PID1", payload={"accepted": "true"})
+
+    @pytest.mark.asyncio
+    async def test_read_only__send_message_raises(self, mock_token) -> None:
+        """send_message raises ReadOnlyError on a read-only instance."""
+        s = Spond(MOCK_USERNAME, MOCK_PASSWORD, read_only=True)
+        s.token = mock_token
+        with pytest.raises(ReadOnlyError):
+            await s.send_message(text="hello", chat_id="CHAT1")
+
+    @pytest.mark.asyncio
+    async def test_read_only__get_events_allowed(
+        self, mock_token
+    ) -> None:
+        """Read methods are still allowed on a read-only instance."""
+        mock_events: list[JSONDict] = [{"id": "ID1", "name": "Event One"}]
+        s = Spond(MOCK_USERNAME, MOCK_PASSWORD, read_only=True)
+        s.token = mock_token
+        s.events = mock_events
+        result = await s.get_event("ID1")
+        assert result == {"id": "ID1", "name": "Event One"}
+
+
+class TestUpcomingMethod:
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_upcoming__happy_path(self, mock_get, mock_token) -> None:
+        """get_upcoming returns list[JSONDict] and sets s.upcoming."""
+        s = Spond(MOCK_USERNAME, MOCK_PASSWORD)
+        s.token = mock_token
+
+        mock_upcoming_data: list[JSONDict] = [
+            {"id": "EV1", "updated": "2026-02-01T10:00:00Z", "startTime": "2026-03-01T10:00:00Z", "heading": "Training"},
+            {"id": "EV2", "updated": "2026-02-02T10:00:00Z", "startTime": "2026-03-05T10:00:00Z", "heading": "Match", "unanswered": True},
+        ]
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_upcoming_data
+        )
+
+        result = await s.get_upcoming()
+
+        mock_url = "https://api.spond.com/core/v1/sponds/upcoming"
+        mock_get.assert_called_once_with(
+            mock_url,
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+            },
+        )
+        assert result == mock_upcoming_data
+        assert s.upcoming == mock_upcoming_data

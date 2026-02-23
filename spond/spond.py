@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from . import JSONDict
+from . import JSONDict, ReadOnlyError
 from ._event_template import _EVENT_TEMPLATE
 from .base import _SpondBase
 
@@ -19,13 +19,20 @@ class Spond(_SpondBase):
     _EVENT: ClassVar = "event"
     _GROUP: ClassVar = "group"
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(self, username: str, password: str, read_only: bool = False) -> None:
         super().__init__(username, password, self._API_BASE_URL)
+        self.read_only = read_only
         self._chat_url = None
         self._auth = None
         self.groups: list[JSONDict] | None = None
         self.events: list[JSONDict] | None = None
         self.messages: list[JSONDict] | None = None
+        self.profile: JSONDict | None = None
+        self.upcoming: list[JSONDict] | None = None
+
+    def _check_not_read_only(self) -> None:
+        if self.read_only:
+            raise ReadOnlyError("This Spond instance is read-only; write operations are not permitted.")
 
     async def _login_chat(self) -> None:
         api_chat_url = f"{self.api_url}chat"
@@ -165,6 +172,7 @@ class Spond(_SpondBase):
         JSONDict
              Result of the sending.
         """
+        self._check_not_read_only()
         if not self._auth:
             await self._login_chat()
         url = f"{self._chat_url}/messages"
@@ -203,6 +211,7 @@ class Spond(_SpondBase):
         dict
              Result of the sending.
         """
+        self._check_not_read_only()
         if self._auth is None:
             await self._login_chat()
 
@@ -363,6 +372,7 @@ class Spond(_SpondBase):
         json results of post command
 
         """
+        self._check_not_read_only()
         event = await self._get_entity(self._EVENT, uid)
         url = f"{self.api_url}sponds/{uid}"
 
@@ -417,11 +427,28 @@ class Spond(_SpondBase):
         JSONDict
             event["responses"] with updated info
         """
+        self._check_not_read_only()
         url = f"{self.api_url}sponds/{uid}/responses/{user}"
         async with self.clientsession.put(
             url, headers=self.auth_headers, json=payload
         ) as r:
             return await r.json()
+
+    @_SpondBase.require_authentication
+    async def get_upcoming(self) -> list[JSONDict] | None:
+        """
+        Retrieve upcoming events for the authenticated user.
+
+        Returns
+        -------
+        list[JSONDict] or None
+            A list of upcoming event summaries, each represented as a dictionary,
+            or None if no upcoming events are available.
+        """
+        url = f"{self.api_url}sponds/upcoming"
+        async with self.clientsession.get(url, headers=self.auth_headers) as r:
+            self.upcoming = await r.json()
+            return self.upcoming
 
     @_SpondBase.require_authentication
     async def _get_entity(self, entity_type: str, uid: str) -> JSONDict:
